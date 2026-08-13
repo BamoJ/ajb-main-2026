@@ -1,0 +1,12 @@
+/**
+ * Base styles across pages — needed for Taxi page transitions.
+ */
+
+.is-transition {
+	z-index: 10;
+	position: fixed;
+	top: 0;
+	left: 0;
+	width: 100%;
+	height: 100%;
+}

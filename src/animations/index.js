@@ -1,0 +1,65 @@
+import FadeIn from './global/effect/FadeIn';
+import LineReveal from './global/line/LineReveal';
+import ParaReveal from './global/text/ParaReveal';
+import HeadingReveal from './global/text/HeadingReveal';
+import ImageReveal from './global/effect/ImageReveal';
+import ImageParallax from './global/effect/ImageParallax';
+
+/**
+ * Animation registry — maps `data-anim*` attributes to animation classes.
+ *
+ * To add an animation:
+ *   1. Implement an AnimationCore subclass.
+ *   2. Add one line under `data-anim` here — `'my-effect': MyClass`
+ *
+ * No more per-type querySelectorAll. The registry is auto-scanned at
+ * discovery time.
+ */
+const REGISTRY = {
+	'data-anim': {
+		'fade-in': FadeIn,
+		'line': LineReveal,
+		'image-reveal': ImageReveal,
+		'image-parallax': ImageParallax,
+		'heading': HeadingReveal,
+		'paragraph': ParaReveal,
+	},
+};
+
+/**
+ * Animation manager — discovers + sets up animations on construction,
+ * activates them via `activate()` once the page is ready (after WebGL flight).
+ */
+export default class Animation {
+	constructor(scope = document) {
+		this.collection = [];
+		this.discover(scope);
+	}
+
+	discover(scope = document) {
+		for (const [attr, valueMap] of Object.entries(REGISTRY)) {
+			for (const [value, AnimClass] of Object.entries(valueMap)) {
+				scope
+					.querySelectorAll(`[${attr}="${value}"]`)
+					.forEach((el) => {
+						const inst = new AnimClass(el);
+						inst.setup();
+						this.collection.push(inst);
+					});
+			}
+		}
+	}
+
+	/**
+	 * Arm all ScrollTriggers. Call after WebGL flight resolves so scroll
+	 * animations don't fire mid-transition.
+	 */
+	activate() {
+		this.collection.forEach((a) => a.activate());
+	}
+
+	destroy() {
+		this.collection.forEach((a) => a.destroy());
+		this.collection = [];
+	}
+}

@@ -1,0 +1,15 @@
+/**
+ * Theme cross-fade — applied only while a theme switch is in flight (the
+ * .is-theme-switching class is added to <body> for ~600ms by @utils/theme),
+ * so we don't tax every hover/interaction with a permanent transition.
+ */
+
+body.is-theme-switching,
+body.is-theme-switching * {
+	transition:
+		background-color 0.6s var(--gleasing),
+		color 0.6s var(--gleasing),
+		border-color 0.6s var(--gleasing),
+		fill 0.6s var(--gleasing),
+		stroke 0.6s var(--gleasing);
+}
