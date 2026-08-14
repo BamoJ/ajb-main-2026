@@ -2,7 +2,6 @@
 @import './lenis.css';
 @import './base.css';
 @import './theme.css';
-@import './videoplayer/player.css';
 
 /* Descender room for every SplitText masked line (mask: 'lines' clips glyphs
    like g/j/y at tight line-heights without it). */

@@ -4,6 +4,7 @@ import ParaReveal from './global/text/ParaReveal';
 import HeadingReveal from './global/text/HeadingReveal';
 import ImageReveal from './global/effect/ImageReveal';
 import ImageParallax from './global/effect/ImageParallax';
+import HeroScroll from './scroll/HeroScroll';
 
 /**
  * Animation registry — maps `data-anim*` attributes to animation classes.
@@ -23,6 +24,7 @@ const REGISTRY = {
 		'image-parallax': ImageParallax,
 		'heading': HeadingReveal,
 		'paragraph': ParaReveal,
+		'hero-scroll': HeroScroll,
 	},
 };
 
