@@ -6,8 +6,7 @@ export default class ImageReveal extends AnimationCore {
 		super(element, {
 			duration: 1.7,
 			ease: easings.revealEase,
-			start: 'top bottom',
-			markers: true,
+			triggerStart: 'top center',
 		});
 	}
 

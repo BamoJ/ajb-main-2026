@@ -149,3 +149,50 @@ Verify via dev server + `/artwork?dev=true`: open/close wipes, row-to-row
 spam, re-enter mid-close smoothness; if an open thumb ever paints under a
 later row's text (hover opacity creates a stacking context), fix is a
 zIndex raise on enter — verify first, don't pre-add.
+
+---
+
+## 2026-08-17 — Home featured artwork: entrance + hover (art-hover)
+
+**What:** `components/art-hover/art-hover.js` — entrance reveal AND hover
+reveal for the homepage `.featured-artworks` section, in ONE file. Deliberate:
+both write clipPaths on the same elements, so a second owner (an
+`animations/` registry class) would race the first. Confirmed working by Bamo.
+
+**Architecture — the part that matters.** The section has TWO separate CMS
+lists (links vs thumbs) whose items and order do NOT match, so pairing is by
+SLUG: link `href` tail ↔ CMS-bound `data-art-slug` on `.wrp-img-highlight`.
+The three `.home_artwork_item`s are absolutely stacked and EACH carries the
+opaque beige `#f4f4ed` — that fact caused every bug this session. Final design
+(Bamo's idea, correct): a **cloned backdrop** — `first.item.cloneNode(true)`,
+image included, `data-art-slug` stripped, `zIndex: 0`, inserted as first child
+of `.home_artwork_list`. It owns the beige AND displays the settled artwork.
+The real panels become pure animation layers: permanently transparent
+background, `zIndex >= 1`, masks hidden at rest. Hover = raise panel, `fromTo`
+mask `inset(100% 0 0 0)`→`inset(0)` + img scale 1.25→1 (1.5s `revealEase`,
+`overwrite: true`). On complete, `settle()` copies the image onto the backdrop
+(src/srcset/sizes) and — after `img.decode()`, guarding a one-frame blank —
+resets all panels. Entrance runs entirely on the backdrop: beige wipes
+bottom→up (1.7s), artwork follows at `'<45%'`; `onView` from `@core/observe`
+(`rootMargin: '0px 0px -15% 0px'`, once); hover listeners armed ONLY in the
+entrance's `onComplete`, so the two can never interleave.
+
+**Why this shape (4 failed designs — do NOT reintroduce):** (1) painting the
+beige on `.home_artwork_list` = full-page beige (that element is huge, not the
+box). (2) Instantly hiding non-current items = the reported "image gone
+abruptly" — an image must be hidden ONLY when something fully covers it.
+(3) Discarding an interrupted wipe = visible jump back to item 1. (4) A
+`shown` flag that skipped the tween on re-hover = "dead" fast hovers. The
+backdrop kills all four at once: every panel is always closed when hovered, so
+every hover animates, and what sits under a wipe is the backdrop, which hover
+logic never touches.
+
+**State:** builds (187.48KB), prettier clean, verified live by Bamo.
+Known-left: (a) pre-JS the browser paints the LAST stacked item on top for a
+frame — kill with a z-index on the first `.home_artwork_item` in the Designer
+if the flash bothers; (b) the thumbs list renders zuri / light-in-the-darkness
+/ danger-close while the links list renders savannah-smile / zuri /
+light-in-the-darkness — a link with no matching thumb simply does nothing;
+fix by pointing both lists at the same items/order in Webflow; (c) a future
+DOM page transition may want to compose with the entrance — add a signal then,
+not now.
