@@ -54,6 +54,7 @@ export default class AnimationCore {
 				end: this.options.triggerEnd,
 				animation: this.timeline,
 				scrub: this.options.scrub,
+				pin: this.options.pin,
 				invalidateOnRefresh: this.options.invalidateOnRefresh,
 				markers: this.options.markers,
 				onEnter: () => this.onEnter(),

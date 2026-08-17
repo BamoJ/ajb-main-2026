@@ -5,6 +5,7 @@ import HeadingReveal from './global/text/HeadingReveal';
 import ImageReveal from './global/effect/ImageReveal';
 import ImageParallax from './global/effect/ImageParallax';
 import HeroScroll from './scroll/HeroScroll';
+import { ArtworkHero, ArtworkGallery } from './scroll/ArtworkScroll';
 
 /**
  * Animation registry — maps `data-anim*` attributes to animation classes.
@@ -18,12 +19,19 @@ import HeroScroll from './scroll/HeroScroll';
  */
 const REGISTRY = {
 	'data-anim': {
+		// Keep the gallery PIN first: ScrollTrigger refreshes triggers in
+		// creation order (no auto-sort unless refreshPriority is used), so
+		// the pin must exist before triggers that can sit BELOW it in the
+		// document (e.g. 'paragraph' on the artwork description) — their
+		// start positions must include the pin spacer's added height.
+		'artwork-hero': ArtworkHero,
+		'artwork-gallery': ArtworkGallery,
 		'fade-in': FadeIn,
-		'line': LineReveal,
+		line: LineReveal,
 		'image-reveal': ImageReveal,
 		'image-parallax': ImageParallax,
-		'heading': HeadingReveal,
-		'paragraph': ParaReveal,
+		heading: HeadingReveal,
+		paragraph: ParaReveal,
 		'hero-scroll': HeroScroll,
 	},
 };

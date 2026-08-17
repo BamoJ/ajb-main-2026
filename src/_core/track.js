@@ -39,7 +39,9 @@ function computeBounds(el, config) {
 
 function getScrollY() {
 	const lenis = SmoothScroll.instance?.lenis;
-	return lenis ? lenis.actualScroll ?? lenis.scroll ?? window.scrollY : window.scrollY;
+	return lenis
+		? (lenis.actualScroll ?? lenis.scroll ?? window.scrollY)
+		: window.scrollY;
 }
 
 function subscribeScroll(fn) {

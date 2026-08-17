@@ -6,15 +6,17 @@ export default class ImageReveal extends AnimationCore {
 		super(element, {
 			duration: 1.7,
 			ease: easings.revealEase,
+			start: 'top bottom',
+			markers: true,
 		});
 	}
 
 	animate() {
 		this.element.style.transformOrigin = 'right center';
-		this.timeline.to(
+		this.timeline.from(
 			this.element,
 			{
-				scaleX: 0,
+				clipPath: 'inset(100% 0% 0% 0%',
 				duration: this.options.duration,
 				ease: this.options.ease,
 			},

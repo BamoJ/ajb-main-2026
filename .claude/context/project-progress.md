@@ -85,3 +85,67 @@ tuning) → linear crawl off the top + fade, gone by 0.85. New Webflow hook:
 `data-hero-heading` on `.hero_heading_wrap`. Bamo also dropped the JS
 `loading='eager'` (sizes='100vw' kept). Builds at 180.40KB; browser verify of
 the heading beats pending.
+
+---
+
+## 2026-08-14 — ParaReveal rewritten for attribute-on-element markup
+
+**What:** `animations/global/text/ParaReveal.js` rewritten. Root cause of the
+"messy lines": the class was written for a wrapper pattern
+(`querySelectorAll('p…span')` on descendants), but the live site puts
+`data-anim="paragraph"` directly ON the text element (all 24 on the homepage:
+1 `<p>` with inline styled spans, 21 `.text-block` divs, 1 `<h2>`, 1 plain
+`<p>`). Result: the spans-in-`<p>` case split each inline span as its own
+SplitText target (line boxes broke mid-sentence), and the divs/h2 matched
+nothing → never animated at all (desktop AND mobile). Fix: split
+`this.element` directly (same idiom as HeadingReveal); mobile fades
+`this.element`. Removed per Bamo: the `display:contents` triggerElement
+branch (pattern not used in this project). Also removed: `preserveHTML`
+(doesn't exist in gsap 3.15 SplitText — verified 0 hits in source),
+`reduceWhiteSpace: false`, the `originalContent` innerHTML save/restore
+(`split.revert()` does it natively). Second root cause fixed: fonts load
+async via WebFont.js, so lines were measured against fallback metrics —
+added a one-time `document.fonts.ready` re-split (skipped when fonts already
+loaded). New `resplit()` shared by resize + font hook, guarded by
+`_isSetup`/`_isActive` (old resize handler could arm a ScrollTrigger before
+TransitionManager's activate()) and `_hasPlayed` (revealed paragraphs snap to
+end state via `progress(1)` instead of replaying). `_destroyed` guard makes
+late resize/fonts callbacks inert after Taxi page-leave. Kept Bamo's
+`yPercent: 120` start value.
+
+**State:** builds (180.15KB), prettier clean, bundle grep confirms
+fonts.ready path in / preserveHTML out. NOT yet browser-verified — check via
+`bun run dev` + `https://ajb-website.webflow.io/?dev=true`: featured
+paragraph splits into clean full lines with spans inline; text-block divs +
+h2 now reveal; mobile ≤991px fades; resize + slow-font reload re-split
+without replaying. Known-left: font re-split can shift other animations' ST
+positions (if drift visible, one `ScrollTrigger.refresh()` after fonts.ready
+at manager level); isMobile fixed at construction (pre-existing).
+
+---
+
+## 2026-08-14 — Artwork list hover (/artwork): big-thumb reveal
+
+**What:** `components/artwork-list-hover/artwork-list-hover.js` rewritten
+(was a half-edited copy of the homepage `art-hover` — undefined vars, broken
+`.wrp-artwork list` selector, slug pairing this page doesn't need). Live DOM
+validated via curl of the published /artwork page: each `.w-dyn-item` has ONE
+`a.artwork-link` wrapping both the text row and its own `.artwork_thumb_big`
+(Webflow CSS: `clip-path: inset(50% 0%)`, `position: absolute` centered on
+the row, `pointer-events: none`) — so no cross-list lookup at all. Behavior
+(per Bamo): open on mouseenter (clip → `inset(0% 0%)`, 0.9s revealEase, img
+scale 1.25→1), CLOSE on mouseleave (0.45s back to center). `gsap.to` +
+`overwrite: true` (NOT fromTo): re-enter mid-close continues from the current
+clip value instead of snapping. Reduced motion → gsap.set. AbortController +
+onDestroy killTweensOf. `art-hover/` (homepage) untouched.
+
+**State:** builds (183.35KB), prettier clean, `artwork_thumb_big` present in
+bundle. NOT browser-verified yet. Needs in Webflow Designer:
+`data-component="artwork-list-hover"` on `.section-artwork-list` (published
+page currently has NO data-component anywhere). Flagged to Bamo:
+`.artwork-link:hover { opacity: .8 }` dims the revealed thumb too (it's
+inside the link) — remove in Webflow if it looks wrong, JS unaffected.
+Verify via dev server + `/artwork?dev=true`: open/close wipes, row-to-row
+spam, re-enter mid-close smoothness; if an open thumb ever paints under a
+later row's text (hover opacity creates a stacking context), fix is a
+zIndex raise on enter — verify first, don't pre-add.
