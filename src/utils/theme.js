@@ -10,9 +10,9 @@ import emitter from '@utils/Emitter';
  * <body> class (from Taxi's fetched document) and applies it to the live body,
  * cross-fading via the .is-theme-switching CSS rule (see styles/theme.css).
  *
- * Decoupled from WebGL: applyTheme() broadcasts `theme:change` and getTheme()
- * exposes the current token, so the canvas layer can follow the theme without
- * this module importing anything WebGL.
+ * applyTheme() broadcasts `theme:change` and getTheme() exposes the current
+ * token, so any module can follow the theme without importing this one's
+ * consumers.
  */
 
 const PREFIX = 'u-theme-';
@@ -61,8 +61,8 @@ export function applyTheme(token, { animate = true } = {}) {
 	THEMES.forEach((t) => body.classList.remove(PREFIX + t));
 	body.classList.add(next);
 	current = token;
-	// Decoupled signal so the WebGL layer (clear color / uniforms) or anything
-	// else can follow the theme without this module knowing about them.
+	// Decoupled signal so anything (components, animations) can follow the
+	// theme without this module knowing about them.
 	emitter.emit('theme:change', { theme: token, previous, animate });
 	if (animate) {
 		clearTimeout(switchTimer); // guard rapid navigation
@@ -85,7 +85,7 @@ export function switchThemeFromEntry(entry, opts) {
 
 /**
  * Prime `current` from the live <body> at boot so getTheme() is correct before
- * the first navigation (e.g. when the WebGL canvas is created at startup).
+ * the first navigation.
  */
 export function initTheme() {
 	current = readThemeFromDocument(document) || current;

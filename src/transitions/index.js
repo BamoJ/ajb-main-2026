@@ -1,9 +1,11 @@
 import { Core } from '@unseenco/taxi';
+import { gsap } from 'gsap';
 import SmoothScroll from '@utils/smoothscroll';
 import Components from '@components';
 import emitter from '@utils/Emitter';
-import GlobalTransition from './global/GlobalEnter';
+import GlobalTransition, { composeHeroEnter } from './global/GlobalEnter';
 import Animation from '@animations';
+import { prefersReducedMotion } from '@utils/media';
 import { resetWebflow } from '@webflow/reset-webflow';
 import { initTheme, switchThemeFromEntry } from '@utils/theme';
 import { updateActiveNav } from '@utils/nav';
@@ -23,19 +25,15 @@ import {
  *     stopScroll → await runPageOut() → runDestroy() (auto cleanup)
  *
  *   onEnter:
- *     page transition composes its timeline (flight handles + DOM)
- *     canvas.onChange → WebGL page swap (parallel to DOM transition)
- *     …timeline completes → remove old views → resetWebflow →
- *     re-discover components/animations → activate → startScroll →
+ *     incoming view hidden + its animations set up (pre-fade, invisible) →
+ *     transition composes its timeline (crossfade + shared hero enter) →
+ *     …fade completes → remove old views → resetWebflow →
+ *     re-discover components → activate animations → startScroll →
  *     await runPageIn() → emit transition:complete
  */
 export default class TransitionManager {
-	constructor({ canvas = null, pageTransitions = {} } = {}) {
+	constructor({ pageTransitions = {}, deferInitial = false } = {}) {
 		this.scroll = new SmoothScroll();
-		// main.js constructs the Canvas itself (or passes null on no-WebGL
-		// pages). No fallback construction here — importing Canvas would drag
-		// Three.js into DOM-only bundles.
-		this.canvas = canvas;
 		initTheme(); // prime current theme from the live <body>
 		updateActiveNav(); // underline the nav link for the initial page
 		this.pageTransitions = pageTransitions;
@@ -48,12 +46,44 @@ export default class TransitionManager {
 		this.init();
 		this.component = new Components();
 		this.animation = new Animation();
-		this.animation.activate();
-		// Taxi transitions never run on a hard load — give the current page's
-		// transition class one shot at its enter choreography on boot.
-		this.pageTransitions[this.detectPageName()]?.initialEnter?.(
-			document.querySelector('[data-taxi-view]'),
+		// Built paused at construction: building it applies the hero hidden
+		// states immediately (from()'s immediateRender) — invisibly behind
+		// the loader on preloaded boots. main.js passes `deferInitial` and
+		// calls initialEnter() at loader fade-out; plain boots run it here.
+		this.initialTl = this._buildInitialEnter();
+		if (!deferInitial) this.initialEnter();
+	}
+
+	/**
+	 * Hard-load enter choreography. Taxi transitions never run on a hard
+	 * load, so the shared hero enter is composed here instead of via
+	 * GlobalEnter.composeEnter.
+	 */
+	_buildInitialEnter() {
+		const view = document.querySelector('[data-taxi-view]');
+		if (!view) return null;
+		// Per-page hard-load seam (registry usually empty — kept for pages
+		// that later earn their own transition class).
+		this.pageTransitions[this.detectPageName(view)]?.initialEnter?.(
+			view,
 		);
+		if (prefersReducedMotion()) return null;
+		const tl = gsap.timeline({ paused: true });
+		composeHeroEnter(view, tl);
+		return tl;
+	}
+
+	/**
+	 * Arm ScrollTriggers and play the hard-load hero enter. Runs from the
+	 * constructor on plain boots; deferred to the loader's fade-out when
+	 * main.js passes `deferInitial` (so in-viewport data-anim reveals don't
+	 * fire invisibly behind the overlay).
+	 */
+	initialEnter() {
+		this.animation.activate();
+		this.scroll.startScroll();
+		this.initialTl?.play();
+		this.initialTl = null;
 	}
 
 	createTransitions(TransitionClass) {
@@ -73,11 +103,17 @@ export default class TransitionManager {
 
 			onEnter({ to, trigger, done }) {
 				to.classList.add('is-transition');
-
-				// Expose the WebGL controller so page transitions can compose
-				// flight handles onto their timeline (see ProjectTrans).
-				this.transitionController =
-					manager.canvas?.transitionController || null;
+				// Build the incoming page's animations NOW, while it cannot
+				// be seen: GlobalEnter fades `to` in from opacity 0, so
+				// setup()'s SplitText + from()-state hidden sets land
+				// invisibly. The old order (re-init after the fade) painted
+				// the new page fully visible, snapped it hidden, then
+				// replayed the reveals. Cache-safe: Taxi caches fetched pages
+				// from the fetched HTML string (Renderer._contentString),
+				// never the live DOM. Scoped to `to` so the OLD page's
+				// instances keep animating through the fade.
+				gsap.set(to, { opacity: 0 });
+				manager.pendingAnimation = new Animation(to);
 
 				super.onEnter({ to, trigger }, async () => {
 					try {
@@ -107,11 +143,15 @@ export default class TransitionManager {
 						resetWebflow();
 
 						manager.component?.destroy?.();
+						// Old page's instances only — its views are already
+						// swept, so the reverts are invisible.
 						manager.animation?.destroy?.();
 						manager.component = new Components();
-						manager.animation = new Animation();
-						// setup() is done by Animation constructor.
-						// activate() runs once page is ready (no scroll race).
+						// The incoming page's animations were set up pre-fade
+						// (see above); ScrollTriggers arm only now — after
+						// scrollTo(0,0) + resize, no scroll race.
+						manager.animation = manager.pendingAnimation;
+						manager.pendingAnimation = null;
 						manager.animation.activate();
 
 						scrollInstance.startScroll();
@@ -123,34 +163,9 @@ export default class TransitionManager {
 					} catch (err) {
 						console.error('[TransitionManager] onEnter failed:', err);
 					} finally {
-						// Defensive: if a flight was prepared but no page
-						// transition consumed the staged mesh (no per-page
-						// Transition registered, no [data-gl-target], or
-						// the page transition threw), this catches the orphan.
-						// No-op when the flight already cleaned itself up.
-						manager.canvas?.transitionController?.cleanup?.();
 						done();
 					}
 				});
-
-				// Trigger WebGL page swap (parallel to DOM transition). If a
-				// mesh was staged via `webgl:transition:prepare`, the per-page
-				// transition class (e.g. ProjectTrans) calls
-				// `transitionController.getFlightContext(rect)` synchronously
-				// to grab the mesh + helpers and authors the unified timeline.
-				if (manager.canvas) {
-					const pageName = manager.detectPageName(to);
-					// Hand the OUTGOING WebGL page the link that was clicked so
-					// its transitionOut can branch on it. Taxi gives us the
-					// clicked <a> as `trigger`; null on popstate/programmatic.
-					if (manager.canvas.currentPage) {
-						manager.canvas.currentPage.leaveTrigger = trigger;
-					}
-					// Always tell the canvas: leaving to a non-WebGL page
-					// (null / unregistered name) runs the current page's
-					// onLeave so its exit choreography still plays.
-					manager.canvas.onChange(pageName, to);
-				}
 			}
 		};
 	}
@@ -178,9 +193,8 @@ export default class TransitionManager {
 			}
 
 			onEnter(args, done) {
-				// Dispatch on the detected page name — the same detector
-				// canvas.onChange uses — not a substring path match. A raw
-				// `path.includes('home')` never matches "/", and
+				// Dispatch on the detected page name, not a substring path
+				// match. A raw `path.includes('home')` never matches "/", and
 				// `/projects-archive` would false-match `project`.
 				const name = manager.detectPageName(args.to);
 				const trans = name ? this.specificTransitions[name] : null;
@@ -194,32 +208,11 @@ export default class TransitionManager {
 	}
 
 	detectPageName(pageElement = document.body) {
-		const pageAttr =
+		return (
 			pageElement.dataset.page ||
-			pageElement.dataset.canvasPage ||
-			pageElement.querySelector('[data-page]')?.dataset.page;
-
-		if (pageAttr) return pageAttr;
-
-		// URL fallback — exact path-segment match. Substring `.includes()`
-		// would falsely match `/home-services` against `home`, or
-		// `/projects-archive` against `project`.
-		if (!this.canvas) return null;
-
-		const segments = window.location.pathname
-			.split('/')
-			.filter(Boolean);
-
-		for (const key of Object.keys(this.canvas.registry)) {
-			if (
-				segments.length === 0 &&
-				(key === 'home' || key === 'index')
-			) {
-				return key;
-			}
-			if (segments.includes(key)) return key;
-		}
-		return null;
+			pageElement.querySelector('[data-page]')?.dataset.page ||
+			null
+		);
 	}
 
 	init() {

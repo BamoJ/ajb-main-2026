@@ -162,7 +162,7 @@ export default function cursor(el) {
 
 ## Webflow Integration
 
-- HTML lives in Webflow; this bundle is the JS/WebGL layer. Set `data-component="menu"` directly on the relevant Webflow element.
+- HTML lives in Webflow; this bundle is the JS layer. Set `data-component="menu"` directly on the relevant Webflow element.
 - After every Taxi page swap, `resetWebflow()` runs `window.Webflow.forEach(wf => { wf.destroy(); wf.ready() })` so Webflow native JS (forms, tabs, sliders, IX2) re-inits on the new DOM. Your factory then runs against that re-inited DOM.
 - For elements where you use Webflow Interactions, add `data-taxi-ignore` on the link to prevent SPA navigation from clobbering it.
 

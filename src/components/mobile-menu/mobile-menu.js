@@ -1,5 +1,5 @@
 import gsap from 'gsap';
-import { onDestroy } from '@core/hooks';
+import { onDestroy, onPageOut } from '@core/hooks';
 import { prefersReducedMotion } from '@utils/media';
 import SmoothScroll from '@utils/smoothscroll';
 
@@ -16,6 +16,10 @@ const Y_FROM = 110;
 // The menu only exists under Webflow's mobile-portrait breakpoint:
 // `.nav-mobile-button` is display:none until here.
 const BREAKPOINT = '(max-width: 479px)';
+
+// Close plays back faster than it opened. 1 = same speed as open,
+// 2 = twice as fast. Applied as a timeScale, see setOpen().
+const CLOSE_SPEED = 1.6;
 
 /**
  * Mobile menu (<= 479px).
@@ -53,6 +57,7 @@ export default function mobileMenu(el) {
 	const reduced = prefersReducedMotion();
 	const controller = new AbortController();
 	let isOpen = false;
+	let closeResolve = null;
 
 	// Static start states, set once while the menu is still display:none.
 	// The timeline below uses `.to()` only, so reverse() lands exactly
@@ -89,8 +94,8 @@ export default function mobileMenu(el) {
 		},
 		0,
 	);
-	tl.addLabel('links', '<45%'); // 25% into the panel wipe
-	tl.addLabel('image', '<65%'); // 45% into the panel wipe
+	tl.addLabel('links', '<45%'); // 45% into the panel wipe
+	tl.addLabel('image', '<65%'); // 65% into the panel wipe
 
 	// Dark backdrop fades up with the panel.
 	tl.to(
@@ -144,6 +149,8 @@ export default function mobileMenu(el) {
 
 	tl.eventCallback('onReverseComplete', () => {
 		gsap.set(menu, { display: 'none' });
+		closeResolve?.();
+		closeResolve = null;
 	});
 
 	const setOpen = (next) => {
@@ -154,8 +161,14 @@ export default function mobileMenu(el) {
 			// Must precede play(): the CSS rule is display:none.
 			gsap.set(menu, { display: 'block' });
 			SmoothScroll.instance?.stopScroll();
-			if (reduced) tl.progress(1).pause();
-			else tl.play();
+			if (reduced) {
+				tl.progress(1).pause();
+				return;
+			}
+			// Back to open speed — a previous close left the timeScale
+			// negative, and play() would otherwise reuse its magnitude.
+			tl.timeScale(1);
+			tl.play();
 			return;
 		}
 
@@ -163,9 +176,13 @@ export default function mobileMenu(el) {
 		if (reduced) {
 			tl.progress(0).pause();
 			gsap.set(menu, { display: 'none' });
-		} else {
-			tl.reverse();
+			return;
 		}
+		// timeScale BEFORE reverse(), never after: reverse() negates the
+		// CURRENT value (gsap-core reversed()), so setting a positive
+		// timeScale afterwards would send the menu playing forward again.
+		tl.timeScale(CLOSE_SPEED);
+		tl.reverse();
 	};
 
 	// GSAP writes an INLINE display:block on `.mobile_menu`, which outranks
@@ -186,6 +203,24 @@ export default function mobileMenu(el) {
 
 	button.addEventListener('click', () => setOpen(!isOpen), {
 		signal: controller.signal,
+	});
+
+	// Close before the page fade. TransitionManager awaits runPageOut, so
+	// the retreat completes before the crossfade starts — the menu lives
+	// outside [data-taxi-view] and nothing else would ever close it (the
+	// onDestroy tl.kill() below would freeze it open through the fade).
+	// Re-registered every nav: hooks drain per runPageOut and component
+	// re-discovery re-runs this factory.
+	onPageOut(() => {
+		if (!isOpen) return;
+		if (reduced) {
+			setOpen(false); // snaps closed, nothing to await
+			return;
+		}
+		return new Promise((resolve) => {
+			closeResolve = resolve;
+			setOpen(false);
+		});
 	});
 
 	onDestroy(() => {

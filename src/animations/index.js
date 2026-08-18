@@ -38,7 +38,8 @@ const REGISTRY = {
 
 /**
  * Animation manager — discovers + sets up animations on construction,
- * activates them via `activate()` once the page is ready (after WebGL flight).
+ * activates them via `activate()` once the page is ready (after the
+ * transition fade / loader).
  */
 export default class Animation {
 	constructor(scope = document) {
@@ -61,8 +62,9 @@ export default class Animation {
 	}
 
 	/**
-	 * Arm all ScrollTriggers. Call after WebGL flight resolves so scroll
-	 * animations don't fire mid-transition.
+	 * Arm all ScrollTriggers. Called after the page is settled
+	 * (post-fade scrollTo/resize) so scroll animations don't fire
+	 * mid-transition.
 	 */
 	activate() {
 		this.collection.forEach((a) => a.activate());

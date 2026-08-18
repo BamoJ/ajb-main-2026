@@ -97,7 +97,7 @@ export default class AnimationCore {
 	/**
 	 * Build the timeline + animation steps. Does NOT create a ScrollTrigger.
 	 * Use this when the animation needs to be armed but should not fire
-	 * until something else (e.g. a WebGL flight) has finished.
+	 * until something else (e.g. the transition fade or loader) has finished.
 	 */
 	setup() {
 		if (prefersReducedMotion()) return;

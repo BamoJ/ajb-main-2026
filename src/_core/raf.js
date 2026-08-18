@@ -19,7 +19,7 @@ function stop() {
 
 /**
  * Subscribe to the shared RAF loop.
- * Lower priority runs first (Lenis=0, WebGL=1).
+ * Lower priority runs first (Lenis=0, perf overlay=10).
  * Returns an unsubscribe function.
  */
 export function addRaf(fn, priority = 0) {

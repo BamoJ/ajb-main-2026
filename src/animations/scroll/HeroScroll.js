@@ -1,24 +1,30 @@
 import { gsap } from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import AnimationCore from '@animations/AnimationCore';
+import { isMobile } from '@utils/media';
 
 /**
- * Home hero — scrubbed over the sticky track: the artwork grows from
- * its 10vw resting size to full width at its natural aspect ratio
- * (never cropped), then pans top-to-bottom through the drawing. The
- * pan ends with the image's bottom edge on the track's bottom edge,
- * so the sticky release itself is the handoff into the content below.
+ * Home hero — scrubbed over the sticky track. Two device behaviors:
  *
- * Heading choreography (same timeline): rises from its resting spot to
- * the viewport center while the image grows, then keeps crawling —
- * slower, no hold — up and off the top, gone before the pan ends.
+ * Desktop: the artwork grows from small to full width at its NATURAL
+ * aspect ratio (never cropped), then pans top-to-bottom through the
+ * drawing; the pan ends bottom-aligned with the track so the sticky
+ * release is the handoff into the content below. The JS re-imposes the
+ * natural ratio on the box (Webflow authors it 100vw × 100vh).
+ *
+ * Mobile: grow-and-stick — the image scales up into the authored
+ * 100vw × 100vh cover box and then does not move until the release.
+ *
+ * Heading choreography (same timeline, both devices): rises from its
+ * resting spot to the viewport center while the image grows, then
+ * keeps crawling — slower, no hold — up and off the top.
  *
  * Webflow hooks:
  *   data-anim="hero-scroll"  on .sticky_track (the tall scroll runway)
- *   data-hero-image          on the centered image wrap in the sticky stage
+ *   data-hero-image          on the image wrap in the sticky stage
  *   data-hero-heading        on the heading wrap (exclusion-blend element)
  */
-const GROW = 0.4; // portion of the track spent growing; the rest pans
+const GROW = 0.4; // portion of the track spent growing
 const HEADING_CENTER_END = 0.25; // heading reaches viewport center here
 const HEADING_EXIT_END = 0.85; // heading fully gone; artwork solo after
 
@@ -38,12 +44,23 @@ export default class HeroScroll extends AnimationCore {
 		this.heading = this.element.querySelector('[data-hero-heading]');
 		if (!this.wrap || !this.img) return;
 
-		// Published img carries sizes="120px" + lazy — the browser would
+		this.mobile = isMobile();
 
+		// Published img carries sizes="120px" — the browser would never
+		// fetch a source large enough for full-bleed.
 		this.img.sizes = '100vw';
 
-		// Match the box to the artwork's real proportions so object-fit
-		// never crops it, at any size.
+		// Scale the full-size box down instead of animating width/height —
+		// keeps the tween GPU-only.
+		gsap.set(this.wrap, {
+			scale: 0.1,
+			transformOrigin: 'center center',
+		});
+
+		if (this.mobile) return;
+
+		// Desktop: match the box to the artwork's real proportions so
+		// object-fit never crops it, at any size.
 		this.ratio = 3 / 2; // fallback until the image reports its size
 		const applyRatio = () => {
 			const { naturalWidth: w, naturalHeight: h } = this.img;
@@ -52,17 +69,10 @@ export default class HeroScroll extends AnimationCore {
 			this.wrap.style.aspectRatio = `${w} / ${h}`;
 			ScrollTrigger.refresh();
 		};
+		gsap.set(this.wrap, { width: '100vw', height: 'auto' });
 		if (this.img.naturalWidth) applyRatio();
 		else
 			this.img.addEventListener('load', applyRatio, { once: true });
-
-		// Full-size box scaled down, instead of animating width — keeps
-		// the tween GPU-only. scale(0.1) of 100vw = the authored 10vw.
-		gsap.set(this.wrap, {
-			width: '100vw',
-			scale: 0.1,
-			transformOrigin: 'center center',
-		});
 	}
 
 	imgHeight() {
@@ -95,26 +105,39 @@ export default class HeroScroll extends AnimationCore {
 
 	animate() {
 		if (!this.wrap || !this.img) return;
-		this.timeline
-			.to(
+
+		// spine: keeps the constants meaning "fraction of the track"
+		this.timeline.to({}, { duration: 1 }, 0);
+
+		if (this.mobile) {
+			// Grow into the authored full-screen cover box, then stick.
+			this.timeline.to(
 				this.wrap,
-				{
-					scale: 1,
-					y: () => this.growShift(),
-					duration: GROW,
-					ease: 'none',
-				},
+				{ scale: 1, duration: GROW, ease: 'none' },
 				0,
-			)
-			.to(
-				this.wrap,
-				{
-					y: () => this.panShift(),
-					duration: 1 - GROW,
-					ease: 'none',
-				},
-				GROW,
 			);
+		} else {
+			this.timeline
+				.to(
+					this.wrap,
+					{
+						scale: 1,
+						y: () => this.growShift(),
+						duration: GROW,
+						ease: 'none',
+					},
+					0,
+				)
+				.to(
+					this.wrap,
+					{
+						y: () => this.panShift(),
+						duration: 1 - GROW,
+						ease: 'none',
+					},
+					GROW,
+				);
+		}
 
 		if (!this.heading) return;
 		this.timeline

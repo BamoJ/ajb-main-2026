@@ -1,4 +1,4 @@
-# WebGL + Webflow Boilerplate
+# Webflow Motion Boilerplate (DOM-only)
 
 ## Project progress log — READ FIRST
 
@@ -11,46 +11,43 @@ optional.
 
 ## What This Is
 
-A modular toolkit for Webflow sites with custom WebGL experiences. Built on Three.js, GSAP, Taxi (page routing), Lenis (smooth scroll). HTML lives in Webflow — this repo is the JS/WebGL layer injected via `<script>`.
+A modular toolkit for Webflow sites: GSAP animations, Taxi (page routing),
+Lenis (smooth scroll). HTML lives in Webflow — this repo is the JS layer
+injected via `<script>`. **No WebGL** — the canvas layer was removed
+entirely on 2026-08-18 (restore from history if ever needed:
+`git show 62e2727:src/canvas/`).
 
-Output: single IIFE bundle (`dist/main.js`) with CSS inlined via `vite-plugin-css-injected-by-js`.
+Output: single IIFE bundle (`dist/main.js`) with CSS inlined via
+`vite-plugin-css-injected-by-js`.
 
-**Performance target: 60fps minimum on every supported device.** See `/perf-audit` for the full audit checklist; `@utils/perf` ships an FPS overlay for live measurement.
+**Performance target: 60fps minimum on every supported device.** See
+`/perf-audit` for the full audit checklist; `@utils/perf` ships an FPS
+overlay for live measurement.
 
 ## Architecture Overview
 
 ```
 src/
 ├── _core/                   # Foundation — sorts to top of src/
-│   ├── boot.js              # initCore, initWebGL, textureLoadAssets
+│   ├── boot.js              # initCore (Lenis singleton + perf)
 │   ├── hooks.js             # onMount/onDestroy/onPageIn/onPageOut
 │   ├── observe.js           # ObserverManager + onView (pooled IntersectionObserver)
 │   ├── track.js             # onTrack — scroll progress 0-1 over a viewport sweep
-│   ├── raf.js               # Unified RAF, priority subscriptions (Lenis=0, WebGL=1, perf=10)
+│   ├── raf.js               # Unified RAF, priority subscriptions (Lenis=0, perf=10)
 │   └── resize.js            # Centralized debounced resize subscriptions
-├── canvas/                  # WebGL layer
-│   ├── index.js             # Canvas — renderer, camera, scene, page lifecycle
-│   ├── Page.js              # Base class for WebGL pages (extends Emitter)
-│   ├── DOMPlane.js          # DOM → WebGL plane mapping helper
-│   ├── TransitionController.js  # Cross-page mesh clone + GSAP timeline composition
-│   ├── shaders/             # Default shaders + GLSL includes
-│   ├── utils/
-│   │   ├── Time.js          # Render clock (driven by @core/raf, delta-clamped)
-│   │   ├── TextureCache.js  # Singleton texture loader; resolves via publicAssetUrl
-│   │   └── RendererPool.js  # Pooled WebGL contexts for own-canvas overlay effects
-│   └── Home/                # Example WebGL page
 ├── transitions/             # Taxi-based routing
 │   ├── index.js             # TransitionManager — wraps Taxi, runs lifecycle hooks
-│   ├── Preloader.js         # Loading screen (loadAssets is injectable)
-│   ├── global/GlobalEnter.js  # Default global enter transition
-│   └── pages/               # Per-page transition classes (e.g. ProjectTrans)
+│   ├── Preloader.js         # Hard-load loading screen (Webflow-authored overlay)
+│   └── global/
+│       └── GlobalEnter.js   # Default crossfade + shared hero enter (one file)
 ├── components/              # Auto-discovered DOM components
 │   ├── index.js             # Wraps discoverComponents/destroyComponents
 │   └── discover.js          # import.meta.glob → registry by filename
 ├── animations/              # Scroll-driven DOM animations
 │   ├── index.js             # Registry-based discovery (data-attr → class)
 │   ├── AnimationCore.js     # Base: setup() + activate() split
-│   └── global/              # FadeIn, HeadingReveal, ParaReveal, ImageReveal, ImageParallax, LineReveal
+│   ├── global/              # FadeIn, HeadingReveal, ParaReveal, ImageReveal, ImageParallax, LineReveal
+│   └── scroll/              # HeroScroll (home), ArtworkScroll (artwork detail)
 ├── webflow/                 # Webflow-specific helpers
 │   ├── detect-editor.js     # MutationObserver for w-editor-publish-node
 │   └── reset-webflow.js     # Re-runs window.Webflow native JS after Taxi swaps
@@ -60,13 +57,11 @@ src/
 │   ├── easings.js           # GSAP custom easings
 │   ├── media.js             # prefersReducedMotion(), isMobile()
 │   ├── math.js              # damp, lerp, clamp(v, min, max), map
-│   ├── client-rect.js       # Enriched getBoundingClientRect
-│   ├── public-asset.js      # Resolves paths against __PUBLIC_ASSET_ORIGIN__
 │   ├── theme.js             # u-theme-* carry-over across Taxi swaps + theme:change
 │   ├── nav.js               # updateActiveNav — is-active on matching [data-nav-link]
 │   └── perf.js              # FPS overlay, frame drops, web vitals (auto-init; window.perf)
 ├── styles/                  # CSS outside Webflow
-└── main.js                  # Entry — wire what you need, delete what you don't
+└── main.js                  # Entry — Preloader (if authored) + TransitionManager
 ```
 
 ## Lifecycle Hooks (`@core/hooks`)
@@ -79,7 +74,7 @@ import { onMount, onDestroy, onPageIn, onPageOut } from '@core/hooks'
 onMount(() => { /* sync setup, after DOM swap, before user sees the page */ })
 onDestroy(() => { /* sync teardown — listeners, timers, refs */ })
 onPageIn(async () => { /* async, awaited; activate scroll animations here */ })
-onPageOut(async () => { /* async, awaited; element-aware exit animations */ })
+onPageOut(async () => { /* async, AWAITED before the fade — element-aware exit animations */ })
 ```
 
 `runDestroy()` fires on every Taxi `onLeave` — that's the cleanup point. `runMount()`/`runPageIn()` fire on every Taxi `onEnter`. Each call drains the queue (no leftovers between pages).
@@ -90,145 +85,148 @@ onPageOut(async () => { /* async, awaited; element-aware exit animations */ })
 
 A file at `src/components/<anywhere>/<name>.js` exporting a default function is auto-mounted on every element with `data-component="<name>"`. The factory receives `(element, dataset)` and registers cleanup via `onDestroy`.
 
-```js
-// src/components/menu/menu.js
-import { onDestroy } from '@core/hooks'
-
-export default function menu(el, data) {
-  const open = el.querySelector('[data-menu="open"]')
-  const handler = () => el.classList.toggle('is-open')
-  open.addEventListener('click', handler)
-  onDestroy(() => open.removeEventListener('click', handler))
-}
-```
-
-```html
-<nav data-component="menu">
-  <button data-menu="open">Menu</button>
-</nav>
-```
-
-Discovery uses Vite's `import.meta.glob('./!(index|discover|_core)/**/*.js', { eager: true })`. The filename (lowercased) is the component name. Nested components work — both outer and inner `data-component` elements get discovered. Initialized elements are flagged so re-discovery is a no-op.
+Discovery uses Vite's `import.meta.glob('./!(index|discover|_core)/**/*.js', { eager: true })`. The filename (lowercased) is the component name. Nested components work. Initialized elements are flagged so re-discovery is a no-op.
 
 ### Animations — registry-based
 
-`src/animations/index.js` maps data-attribute → class. Add a new animation: drop a class file under `animations/global/...`, add one line to the registry.
+`src/animations/index.js` maps data-attribute → class. Add a new animation: drop a class file under `animations/`, add one line to the registry.
 
-```js
-const REGISTRY = {
-  'data-anim': {
-    'fade-in': FadeIn,
-    'line': LineReveal,
-    'image-reveal': ImageReveal,
-    'image-parallax': ImageParallax,
-    'heading': HeadingReveal,
-    'paragraph': ParaReveal,
-  },
-}
-```
-
-Each animation extends `AnimationCore`. Subclass overrides `animate()` to populate `this.timeline`. Optionally override `createElements()` to cache child queries, and assign `this.triggerElement` to use a non-default trigger.
-
-**Lifecycle:** `setup()` builds the timeline (no ScrollTrigger). `activate()` creates the ScrollTrigger that drives it. `Animation` discovers + setups on construction; TransitionManager calls `activate()` after the page is ready (so scroll animations don't race the WebGL flight). `destroy()` is called on every page leave — there is no per-instance auto-cleanup.
+**Lifecycle:** `setup()` builds the timeline (no ScrollTrigger). `activate()` creates the ScrollTrigger that drives it. On SPA navs the INCOMING view's animations are set up pre-fade (see Transitions below); `activate()` runs after the page is settled. `destroy()` is called on every page leave.
 
 `prefersReducedMotion()` is honored: when set, `setup()` early-returns and no timelines or ScrollTriggers are created.
 
-## Modular Boot (`@core/boot`)
+**HARD CONSTRAINT: `data-anim` only inside `[data-taxi-view]`.** SPA re-discovery is scoped to the incoming view — an animation on persistent chrome (header/footer/menu) would never be re-created after the first navigation.
 
-`main.js` is the wiring layer. Three composable helpers; no adapter pattern, just imports.
+## Boot (`src/main.js`)
 
 ```js
-import { initCore, initWebGL, textureLoadAssets } from '@core/boot'
-import TransitionManager from '@transitions'
-import Preloader from './transitions/Preloader'
-import { Home } from '@canvas/Home'
+window.Webflow.push(() => {
+	const scroll = initCore(); // Lenis singleton
 
-initCore()                                  // SmoothScroll (Lenis) singleton
-const canvas = initWebGL({ pages: { home: Home } })
-const preloader = new Preloader({
-  readySignal: 'home:enter-ready',
-  loadAssets: textureLoadAssets,            // warms TextureCache
-  onAppStart: () => new TransitionManager({ canvas }),
-})
-preloader.start().catch(...)
+	if (document.querySelector('[data-loader="wrapper"]')) {
+		let manager;
+		scroll.stopScroll();
+		new Preloader({
+			onAppStart: () => {
+				manager = new TransitionManager({ pageTransitions, deferInitial: true });
+			},
+			onComplete: () => manager.initialEnter(),
+		}).start();
+	} else {
+		new TransitionManager({ pageTransitions }); // headless — no loader authored
+	}
+});
 ```
 
-**To go DOM-only:** delete `initWebGL`, `Home`, and `loadAssets`. Three.js tree-shakes out. The Preloader's default `loadAssets` falls back to browser-native `new Image()` preloading, so it works with no WebGL imports.
-
-**To skip Taxi:** delete `TransitionManager`, manually call `discoverComponents()` + `runMount()` after DOM is ready.
+The loader path only runs when Webflow has authored a `[data-loader="wrapper"]`
+overlay. `onAppStart` constructs the whole app behind the still-opaque overlay
+(Taxi cache seed, components, animation hidden states, paused hero timeline);
+after the overlay fades out, `onComplete` → `manager.initialEnter()` arms
+ScrollTriggers, starts scroll, and plays the hero enter. Headless boots work
+identically to a no-loader site.
 
 ## Page Transitions
 
-Per-page transition classes own ALL choreography — WebGL handles and DOM tweens compose onto ONE timeline per file, every duration/label visible top-to-bottom. `GlobalEnter` is the default crossfade (per-page pacing via `inDelay`/`inDuration`/`outDelay`/`outDuration` instance fields; `composeEnter(to, tl)` seam for reveals). Per-page classes may define `static initialEnter(view)` — TransitionManager calls it once at boot, since Taxi transitions never run on a hard load.
+**Every page uses `GlobalEnter`** — a crossfade (old view out 0.5s, new view
+in 1s at `0.2`) with the **shared hero enter** riding the fade-in. ONE file:
+`transitions/global/GlobalEnter.js` holds both the fade and the hero beats,
+all timing inline in the tweens (Bamo's rule: no hoisted constants, direct
+position parameters). The per-page registry in `main.js` stays empty until a
+page truly earns bespoke choreography (`composeEnter(to, tl)` override +
+optional `static initialEnter(view)` for hard loads).
 
-**Mesh flight** (cross-page image flights) is a pull-based API on `canvas.transitionController` — there is no `animate()` method and the controller emits nothing:
+### Shared hero enter (`composeHeroEnter`, bottom of GlobalEnter.js)
 
-```js
-// Source page, on link click (TransitionController listens for this):
-emitter.emit('webgl:transition:prepare', { mesh, targetUrl, sourcePage })
+One implementation, two call sites (SPA: `GlobalEnter.composeEnter`; hard
+load: `TransitionManager._buildInitialEnter`). Webflow-authored hooks, all
+optional per page — beat order: visual → heading → content:
 
-// Destination page transition, synchronously inside onEnter:
-const ctx = this.transitionController.getFlightContext(
-	to.querySelector('[data-gl-target]').getBoundingClientRect(),
-)
-// ctx = { mesh, uniforms, sizeProxy, onSizeUpdate, world, cleanup } — raw
-// GSAP-tweenable handles. ctx === null when no mesh was staged (no click,
-// mobile, direct URL) — compose the DOM-only fallback on the same timeline.
-```
+| Attribute | Motion | Channels used |
+|---|---|---|
+| `data-hero-image` | clips open bottom→top (1.5s, at `0.2` — kicks first) | `clip-path` |
+| `data-hero-heading` | SplitText lines rise from masks (yPercent 120, stagger 0.08, at `'>'`) | `yPercent` on line divs |
+| `data-hero-content` | fades in (1s, at `'<50%'`) | `opacity` |
 
-**Position grammar** (GSAP-native, see `src/transitions/pages/ProjectTrans.js`): add the flight-duration spine tween first, then define labels with percent-of-previous syntax — `tl.addLabel('reveal', '<35%')` = 35% into the spine, `tl.addLabel('handoff', '>-20%')` = last 20%. TRAP: a bare `'35%'` position is NOT a percentage — GSAP creates a label literally named "35%" at the timeline's current end.
+Safe-channel rule: HeroScroll (home) and ArtworkHero (artwork detail) scrub
+`y`/`scale` on these same elements — the hero enter deliberately uses only
+opacity/yPercent/clip-path so the two never fight. A hero-tagged element must
+NOT also carry `data-anim` (two owners racing one element). Pages without
+hooks degrade to the plain crossfade.
 
-**WebGL page enter signal**: a page's `transitionIn` emits `<page>:intro-started` with `{ timeline, ...handles }` where handles are raw uniform objects (`{ value }` — plain GSAP targets). The per-page transition composes onto the live timeline; if nobody composes, the empty timeline completes immediately.
+### SPA navigation order (encoded in `transitions/index.js` — do NOT regress)
+
+1. `onLeave`: stopScroll → `transition:start` → await `runPageOut()` → `runDestroy()`
+2. Taxi inserts the new view (`removeOldContent: false` — both views in DOM)
+3. `NAVIGATE_IN`: theme carry-over + active nav
+4. **Pre-fade, same synchronous task:** incoming view set to `opacity: 0`, and
+   `new Animation(to)` (view-scoped) builds all its timelines — hidden states
+   land while the view is invisible. The OLD page's instances stay alive and
+   animating through the fade. This ordering is the fix for the "page paints
+   visible → snaps hidden → replays reveals" bug — moving re-init back after
+   the fade reintroduces it.
+5. Crossfade + `composeEnter` (shared hero enter) on one timeline; a
+   `tl.call()` placed at the fade's end triggers page re-init, so long
+   reveals never delay it
+6. After the fade: sweep old views → scrollTo(0,0) → Lenis resize → rAF yield →
+   `resetWebflow()` → re-discover components → adopt the pre-built Animation →
+   `activate()` (ScrollTriggers arm only now — no scroll race) → startScroll →
+   await `runPageIn()` → `transition:complete`
 
 ### Transition gotchas (all encoded in code — do NOT regress)
 
-- **Taxi inits BEFORE Components/Animation** (TransitionManager constructor). Taxi snapshots the entry DOM into its page cache; if SplitText ran first, split markup gets cached and every SPA return re-splits it → nested masks.
+- **Taxi inits BEFORE Components/Animation** (TransitionManager constructor). Taxi snapshots the entry DOM into its page cache; if SplitText ran first, split markup gets cached and every SPA return re-splits it → nested masks. (Fetched pages are safe — Taxi caches them from the fetched HTML string, never the live DOM.)
 - **`reloadCssFilter: false`** — Webflow's CDN can serve pages referencing different hashed builds of the same shared CSS; Taxi would append the stale stylesheet to `<body>` and its bare-element defaults win the cascade for the session.
 - **Old views are swept from the live DOM** (`querySelectorAll('[data-taxi-view]')`, remove all but `to`) — never a cached `fromElement`, which desyncs under `removeOldContent: false`.
-- **`.canvas` must live OUTSIDE `[data-taxi-view]`** or the first navigation removes the WebGL canvas with the old view (Canvas warns on boot).
+- **Reduced motion skips `composeEnter` entirely** (GlobalEnter early-returns before it) — the page snaps in static. This is intentional.
+- **GSAP positions:** `'<35%'` / `'>-20%'` are percentages of the previous tween; a bare `'35%'` creates a LABEL literally named "35%". Labels + percent-of-previous only, never bare decimal seconds.
+
+## Preloader (`transitions/Preloader.js`)
+
+Hard-load only. Drives a Webflow-authored overlay:
+
+| Attribute | Purpose |
+|---|---|
+| `data-loader="wrapper"` | Fullscreen fixed overlay, authored VISIBLE (JS hides it) |
+| `data-loader="loader-num"` | Progress number (bare text, no % sign) |
+| `data-loader="progress-bar"` | Bar — JS drives `width: 0→100%` |
+
+Default `loadAssets` preloads the page's `<img src>` set (progress capped at
+95 until completion). `onComplete` fires after the overlay has fully faded
+out. Headless-safe: without the wrapper, progress still reports via
+`onProgress` — but `main.js` skips the Preloader entirely in that case.
 
 ## Webflow Integration
 
-- HTML built and hosted in Webflow; this bundle loads via `<script>`.
+- HTML built and hosted in Webflow; this bundle loads via `<script>` (hybrid dev/prod loader in site custom code — see README).
 - Entry waits for `window.Webflow` ready callback.
-- `data-*` attributes hook JS to DOM (see table below).
 - Taxi intercepts `<a>` links for SPA navigation; `resetWebflow()` runs after each swap so forms / tabs / sliders re-init.
-- Editor mode: `handleEditor()` (MutationObserver on `body.firstElementChild`) pauses Lenis when the Designer is active.
-- **Theme carry-over** (`@utils/theme`): pages author `u-theme-dark|light|brand` on `<body>` in Webflow. Taxi never swaps `<body>`, so on `NAVIGATE_IN` the manager reads the incoming document's body class and applies it to the live body, cross-fading via `body.is-theme-switching` (600ms window, `styles/theme.css`). WebGL follows via the `theme:change` event. Fallback: `data-theme` on the incoming view.
+- Editor mode: `handleEditor()` pauses Lenis when the Designer is active.
+- **Theme carry-over** (`@utils/theme`): pages author `u-theme-dark|light|brand` on `<body>`. On `NAVIGATE_IN` the incoming document's body class is applied to the live body, cross-fading via `body.is-theme-switching` (600ms, `styles/theme.css`), broadcast as `theme:change`. Fallback: `data-theme` on the incoming view.
 - **Active nav** (`@utils/nav`): `updateActiveNav()` toggles `is-active` on `a[data-nav-link]` whose path matches the URL — on boot and every `NAVIGATE_IN`.
+- **Persistent chrome** (header, mobile menu, footer, loader) lives OUTSIDE `[data-taxi-view]` and comes from the ENTRY page only — it must exist identically on every page in Webflow.
 
 ## DOM Attributes
 
 | Attribute | Purpose |
 |---|---|
 | `data-component="name"` | Auto-mount component file `<name>.js` on this element |
-| `data-page="home"` | Identify the WebGL page for this URL |
-| `data-gl="img"` | Mark image for DOMPlane mapping |
-| `data-gl-src="..."` | Override texture source for DOMPlane |
-| `data-gl-container` | Hover/click detection container for DOMPlane |
-| `data-loader="wrapper"` | Preloader container |
-| `data-loader="loader-num"` | Progress number display |
-| `data-loader="progress-bar"` | Progress bar element |
-| `data-gl-target` | Destination rect for a mesh flight (project page) |
-| `data-taxi-view` | Taxi's swap target |
+| `data-page="home"` | Page name on the view — per-page transition dispatch (attribute-only, no URL fallback) |
+| `data-taxi` | Persistent wrapper around the view (required for SPA) |
+| `data-taxi-view` | Taxi's swap target (value must stay EMPTY) |
 | `data-taxi-ignore` | Exclude link from Taxi SPA routing |
 | `data-lenis-prevent` | Exclude element from Lenis smooth scroll |
 | `data-nav-link` | Nav anchor — gets `is-active` when its path matches the URL |
 | `data-theme="dark"` | Per-view theme fallback (primary source: `u-theme-*` on body) |
-| `data-anim="fade-in"` | FadeIn |
-| `data-anim="line"` | LineReveal |
-| `data-anim="image-reveal"` | ImageReveal |
-| `data-anim="image-parallax"` | ImageParallax (scrub) |
-| `data-anim="heading"` | HeadingReveal (SplitText chars) |
-| `data-anim="paragraph"` | ParaReveal (SplitText lines) |
+| `data-hero-image` | Shared hero enter: clip reveal, first beat (also HeroScroll's image on home) |
+| `data-hero-heading` | Shared hero enter: SplitText line rise (also HeroScroll's heading on home) |
+| `data-hero-content` | Shared hero enter: opacity fade, last beat |
+| `data-loader="wrapper|loader-num|progress-bar"` | Preloader overlay parts |
+| `data-anim="fade-in|line|image-reveal|image-parallax|heading|paragraph|hero-scroll|artwork-hero|artwork-gallery"` | Registered animations (INSIDE the view only) |
 
 ## Global Events (`@utils/Emitter` singleton)
 
 - `transition:start` — page navigation begins
 - `transition:complete` — new page mounted, hooks done
-- `home:enter-ready` — homepage WebGL created (Preloader `readySignal`)
-- `home:intro-started` — `{ timeline, reveals }` composer signal from Home's `transitionIn`; per-page transitions compose reveals onto the live timeline
-- `webgl:transition:prepare` — `{ mesh, targetUrl, sourcePage }` stages a mesh flight (TransitionController listens)
 - `theme:change` — `{ theme, previous, animate }` from `@utils/theme` applyTheme()
 
 ## Path Aliases
@@ -236,7 +234,6 @@ const ctx = this.transitionController.getFlightContext(
 ```
 @           → src
 @core       → src/_core
-@canvas     → src/canvas
 @transitions → src/transitions
 @components → src/components
 @ui         → src/components/ui
@@ -257,8 +254,6 @@ const ctx = this.transitionController.getFlightContext(
 
 Webflow's site-level custom code includes a hybrid loader. By default it loads from Vercel; `?dev=true` or any `*.webflow.io` host swaps to localhost with auto-fallback. See README for the snippet and behavior matrix.
 
-`__PUBLIC_ASSET_ORIGIN__` (Vite `define`) controls the texture origin for cross-host setups. Set via `PUBLIC_ASSET_ORIGIN` env at build time.
-
 ## Performance Monitoring (`@utils/perf`)
 
 Auto-starts via `_core/boot.js`. Runs on the unified RAF (priority 10 — sees end-of-frame timing).
@@ -268,7 +263,7 @@ import perf from '@utils/perf'
 perf.toggleFpsDisplay()         // also Shift+F (persists in localStorage)
 perf.getMetrics()               // fps, frameTime, min, max, smoothness, budget
 perf.getWebVitals()             // FCP, LCP, CLS via PerformanceObserver
-perf.add('home:enter-ready')    // timing marker
+perf.add('marker-name')         // timing marker
 perf.enableFrameDropDetection() // opt-in, tracks frames > 50ms
 ```
 
@@ -277,18 +272,15 @@ perf.enableFrameDropDetection() // opt-in, tracks frames > 50ms
 ## Conventions
 
 - Tabs for indentation, single quotes, trailing commas (see `.prettierrc`).
-- GLSL imported via `vite-plugin-glsl` with `#include` support.
-- Mobile WebGL guard: `prefersReducedMotion()` + `isMobile()` from `@utils/media`.
+- Mobile guard: `prefersReducedMotion()` + `isMobile()` from `@utils/media`.
 - Console logs stripped in production via terser.
 - No TypeScript. Plain JS only.
+- Animation start/end states are LITERALS (vh/vw strings, yPercent, plain numbers). Runtime measurement only when content-dependent with no literal alternative.
 
 ## Claude Code Skills
 
 | Command | Purpose |
 |---|---|
-| `/webgl-page` | Build new Page subclasses |
-| `/dom-plane` | DOM-to-WebGL plane mapping |
-| `/shader` | GLSL shaders |
 | `/transition` | Page routing + transitions |
 | `/scroll-anim` | Scroll animations (GSAP + ScrollTrigger + SplitText) |
 | `/component` | Auto-discovered DOM components |

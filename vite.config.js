@@ -1,17 +1,9 @@
 import { defineConfig } from 'vite';
 import path from 'path';
 import cssInjectedByJsPlugin from 'vite-plugin-css-injected-by-js';
-import glsl from 'vite-plugin-glsl';
 
 export default defineConfig({
-	// glsl compress: shaders ship as string literals — terser can't touch their
-	// insides, so without this every GLSL comment/blank line ships verbatim.
-	plugins: [cssInjectedByJsPlugin(), glsl({ compress: true })],
-	define: {
-		__PUBLIC_ASSET_ORIGIN__: JSON.stringify(
-			process.env.PUBLIC_ASSET_ORIGIN || '',
-		),
-	},
+	plugins: [cssInjectedByJsPlugin()],
 	server: {
 		host: 'localhost',
 		port: 3000,
@@ -25,7 +17,6 @@ export default defineConfig({
 	resolve: {
 		alias: {
 			'@': path.resolve(__dirname, './src'),
-			'@canvas': path.resolve(__dirname, './src/canvas'),
 			'@transitions': path.resolve(__dirname, './src/transitions'),
 			'@components': path.resolve(__dirname, './src/components'),
 			'@ui': path.resolve(__dirname, './src/components/ui'),

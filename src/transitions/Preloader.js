@@ -6,7 +6,7 @@ import { clamp } from '@utils/math';
  * Preloader — tracks real loading progress and orchestrates page enter.
  *
  * Customize the DOM selectors and animations per project.
- * The loading logic (texture preloading, progress tracking) stays the same.
+ * The loading logic (asset preloading, progress tracking) stays the same.
  *
  * Optional Webflow elements (the DOM overlay flavor):
  *   [data-loader="wrapper"]     - Preloader container
@@ -14,13 +14,13 @@ import { clamp } from '@utils/math';
  *   [data-loader="progress-bar"] - Progress bar element
  *
  * Without a wrapper the DOM bits are skipped and progress is reported only
- * via `onProgress(0..1)` — e.g. to drive a WebGL loading visual. `onProgress`
- * reports the EASED display progress and never forces 1; the host finishes
- * the last stretch itself.
+ * via `onProgress(0..1)`. `onProgress` reports the EASED display progress
+ * and never forces 1; the host finishes the last stretch itself.
  *
- * Asset loading is injectable via `loadAssets(onProgress)`. Default uses
- * browser-native Image preloading so DOM-only projects don't pull in WebGL.
- * For WebGL projects, pass `textureLoadAssets` from `@core/boot`.
+ * Asset loading is injectable via `loadAssets(onProgress)`; the default
+ * preloads the page's images via browser-native `new Image()`.
+ * `onComplete` fires after the overlay has fully faded out — main.js uses
+ * it to play the hard-load hero enter.
  */
 export default class Preloader {
 	constructor(options = {}) {
@@ -47,7 +47,8 @@ export default class Preloader {
 		this.startTime = 0;
 		this.appStarted = false;
 
-		// Page-specific ready signal name (e.g. 'home:enter-ready')
+		// Optional emitter event to await before completing (rarely needed
+		// in DOM-only wiring — leave unset to complete on assets alone).
 		this.readySignal = options.readySignal || null;
 		this.readyTimeout = options.readyTimeout || 2000;
 		this.readyFired = false;
@@ -140,6 +141,7 @@ export default class Preloader {
 
 		await new Promise((r) => setTimeout(r, 100));
 		await this.animateOut();
+		this.onComplete();
 	}
 
 	async loadAssets() {

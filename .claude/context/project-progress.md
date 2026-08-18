@@ -79,12 +79,23 @@ the heading parent was absolute at the TOP of the 400vh track (not sticky) so
 it scrolled away before the image grew — Bamo moved
 `.home_hero_heading_parent` INSIDE `.home_hero_image` (the sticky stage) in
 the Designer; exclusion blend keeps it legible. Heading choreography added to
-HeroScroll on the same scrub: rise to viewport center (0→0.25), hold (gap),
-unlock at the fullscreen moment (anchored to GROW, now 0.4 after Bamo's
-tuning) → linear crawl off the top + fade, gone by 0.85. New Webflow hook:
-`data-hero-heading` on `.hero_heading_wrap`. Bamo also dropped the JS
-`loading='eager'` (sizes='100vw' kept). Builds at 180.40KB; browser verify of
-the heading beats pending.
+HeroScroll on the same scrub: rise to viewport center (0→0.25), then — after
+iteration — NO hold: continuous slower linear crawl off the top, gone by
+0.85, no fade (Bamo removed autoAlpha), independent of GROW (0.4). New
+Webflow hook: `data-hero-heading` on `.hero_heading_wrap`. Bamo dropped the
+JS `loading='eager'` (sizes='100vw' kept).
+
+**Final shape (after mobile blow-up):** the no-crop pan on a phone left the
+image ~60% of screen height drifting between white bands (artwork 1.31:1 vs
+phone ~2.16:1 — full-bleed + no-crop are mutually exclusive on portrait
+screens). Bamo re-authored `.home_image` to 100vw×100vh cover in Webflow.
+HeroScroll now branches once at setup via `isMobile()` (UA + ≤768px):
+DESKTOP keeps the verified grow-uncropped→pan→bottom-aligned-release (JS
+re-imposes natural aspect over the authored box: width 100vw + aspectRatio
+from naturals); MOBILE grows scale 0.1→1 into the authored cover box over
+GROW and then STICKS — zero movement until the sticky release. Timeline got
+a duration-1 spine tween so beat constants stay fractions of the track.
+Builds; Bamo's device re-verify pending.
 
 ---
 
@@ -196,3 +207,89 @@ light-in-the-darkness — a link with no matching thumb simply does nothing;
 fix by pointing both lists at the same items/order in Webflow; (c) a future
 DOM page transition may want to compose with the entrance — add a signal then,
 not now.
+
+---
+
+## 2026-08-18 — Page transitions + hard-load loader; WebGL deleted from source
+
+**What:** Three things in one pass. (1) **WebGL removed entirely**: deleted
+`src/canvas/` (11 files), `utils/client-rect.js`, `utils/public-asset.js`,
+`transitions/pages/` (ArtworkTrans + the 6 empty stubs), skills
+webgl-page/shader/dom-plane; dropped `three` + `vite-plugin-glsl`, the
+`@canvas` alias and `__PUBLIC_ASSET_ORIGIN__` define; package renamed
+`ajb-main-2026`. Zero bundle change (already DOM-only since 08-14); restore
+path: `git show 62e2727:src/canvas/`. `detectPageName` is now attribute-only
+(`data-page` on/inside the view — NO URL fallback). (2) **Transitions**:
+every page uses GlobalEnter's crossfade + NEW shared hero enter
+(`transitions/global/heroEnter.js`): `[data-hero-heading]` rises
+(yPercent 24 + fade, 1.2s), `[data-hero-image]` clips open bottom→up
+(1.4s, `'<35%'`); registry in main.js stays EMPTY by design (Bamo: fewer
+Trans classes). Safe channels only (opacity/yPercent/clip-path) so
+HeroScroll/ArtworkHero scrubs never conflict; hero-tagged elements must not
+also carry `data-anim`. **Snap-bug fix (do NOT regress)**: incoming view's
+`Animation(to)` is now built PRE-fade at `opacity: 0` (wrapped onEnter),
+adopted + `activate()`d post-fade — old order re-setup AFTER the fade, so
+every SPA nav painted the new page visible, snapped it hidden, then
+replayed reveals. Taxi-cache-safe (fetched pages cache from HTML string,
+verified in taxi source). New constraint: `data-anim` only INSIDE
+`[data-taxi-view]`. (3) **Loader**: main.js boots via Preloader when a
+Webflow-authored `[data-loader="wrapper"]` exists — manager constructed
+behind the opaque overlay with new `deferInitial: true`, `onComplete` (now
+actually fired after animateOut) calls new `manager.initialEnter()` (arm
+ScrollTriggers → startScroll → play the same shared hero enter). Headless
+fallback boots immediately. Mobile menu now closes BEFORE the fade via an
+awaited `onPageOut` (was frozen open through transitions). Docs (README,
+CLAUDE.md, 7 skills) purged of WebGL.
+
+**State:** builds green (193.34KB / 69.78KB gzip), prettier clean, dist grep
+0 hits for THREE/ShaderMaterial/__PUBLIC_ASSET_ORIGIN__. NOT browser-verified
+— nothing can run until Webflow gets the Taxi wiring: published site has ZERO
+`data-taxi`/`data-taxi-view` (verified by curl of all 7 page types; Taxi init
+is guarded and silently skips). Bamo's Designer checklist (per page): wrapper
+div `data-taxi` + inner `data-taxi-view` (EMPTY value) + `data-page`, page
+sections moved inside; header/mobile-menu/footer/loader stay OUTSIDE and must
+exist on EVERY page; hero hooks per page (about h1 + bio img, shop h1,
+contact h2, artwork `.artwork-category`, artwork-detail img INSIDE
+`.artwork_visual_top` — not the track itself, shop-detail h1 + first product
+img; home already tagged); loader symbol `data-loader` wrapper/num/bar
+authored visible; optional `data-nav-link` on nav anchors. Flags: shop-detail
+template has NO `.footer` (persistent-footer plan assumes it gets one); real
+routes are `/about-adrian-barnaby`, `/artwork-collections/<slug>`,
+`/ajb-store/<slug>`; staging (`*.webflow.io`) always tries localhost first →
+2 failed requests per visitor (out of scope). Known-left: reduced-motion
+skips composeEnter (static page, intentional); Bamo added an unfinished
+SplitText line in heroEnter.js mid-session (unused `headings` const, no null
+guard) — resolve with him before shipping.
+
+**Update (same day, evening):** Per Bamo, heroEnter.js MERGED into
+GlobalEnter.js (one file, deleted heroEnter.js); heading now SplitText
+`lines`+`mask` rise (yPercent 120, stagger 0.08); NEW third hook
+`data-hero-content` (opacity fade). ALL indirection stripped on his order:
+no pacing constants, no `this.inDelay ??` fields, no 'reveal' label, no `at`
+param, no ternary positions — every duration/ease/position is a literal in
+its tween (in-fade 1s at `0.2`, out 0.5s at `0`; beats: image 1.5s at `0.2`,
+lines at `'>'`, content at `'<50%'`); the resolved/pending/backstop machinery
+replaced by one `tl.call()` at the fade's end. Builds 193.24KB, docs synced.
+Bamo wired Webflow live: `.page_wrapper[data-taxi]` > `.main[data-taxi-view]`
+per page; footer stays INSIDE the view BY DESIGN (shop-detail is
+intentionally footer-less — do NOT re-flag it). Footer-on-top bug root cause:
+leftover `data-taxi` on About's <body> beats the inner wrapper in
+querySelector order — Bamo removing body attrs per page. Timing tuning still
+open ("still off" per Bamo); skills docs still half-trimmed.
+
+**Session close (2026-08-18 night):** Hero enter final shape in
+GlobalEnter.js — image 1.5s at `0.2`; heading SplitText lines at
+`media ? '<+0.9' : 0.7` (the ONE allowed ternary: pages without a visual
+need a different lead-in; both values Bamo's literals, 0.7 his tune);
+content fade at `'<50%'`. Builds green. LEFT FOR BAMO IN DESIGNER:
+(a) remove leftover `data-taxi`/`data-page` from <body> on About + audit
+other pages (root cause of footer-on-top; home verified clean);
+(b) hero hooks — shop: h1.heading + .section-artwork-list(content);
+contact: h2 in .wrp-contact + form block(content); artwork:
+.artwork-category + .section-artwork-list(content); about/artwork-detail/
+shop-detail per earlier checklist incl. data-hero-content picks;
+(c) loader element (data-loader wrapper/num/bar, authored visible);
+(d) optional data-nav-link on nav anchors. LEFT IN REPO: timing tuning
+(Bamo, by eye); skills docs half-trimmed (debug/transition/perf-audit/
+scroll-anim/webflow still mention WebGL); optional fonts.ready re-split
+for hero lines if hard-load line breaks look wrong.

@@ -1,8 +1,8 @@
 /**
  * Centralized, debounced resize subscriptions.
  *
- * Replaces scattered `window.addEventListener('resize')` across Canvas,
- * DOMPlane, etc. Subscribers receive the new {width, height} after a
+ * Replaces scattered `window.addEventListener('resize')` across
+ * components and animations. Subscribers receive the new {width, height} after a
  * 100 ms debounce; same-size frames (e.g. mobile toolbar show/hide)
  * are filtered out. Lower priority runs first.
  *

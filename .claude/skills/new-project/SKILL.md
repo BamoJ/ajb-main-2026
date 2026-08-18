@@ -24,96 +24,18 @@ bun install
 
 ### 2. Identify Pages from Webflow
 
-List all pages in your Webflow site. Each page that needs WebGL effects gets a Page subclass.
+List all pages in your Webflow site. Every page gets Taxi routing, GlobalEnter's crossfade + the shared hero enter, and scroll animations automatically — no per-page class needed.
 
 Common pages:
-- `home` — homepage (usually has image grid with hover effects)
+- `home` — homepage
 - `work` — project listing
-- `project` — individual project detail (transition target)
+- `project` — individual project detail
 - `about` — about page
 - `contact` — contact page
 
-Pages without WebGL effects don't need a Page subclass — they still get Taxi routing and scroll animations automatically.
+Give each page a `data-page` attribute in Webflow (on `<body>` or the view wrapper). `detectPageName()` reads it to dispatch per-page transitions — there is no URL fallback.
 
-### 3. Create Page Subclasses
-
-For each page that needs WebGL:
-
-```js
-// src/canvas/Work/index.js
-import { Page } from '../Page';
-
-export class Work extends Page {
-  calculateViewport() {
-    this.screen = {
-      width: window.innerWidth,
-      height: window.innerHeight,
-    };
-    const fov = this.camera.fov * (Math.PI / 180);
-    const viewportHeight =
-      2 * Math.tan(fov / 2) * this.camera.position.z;
-    const viewportWidth = viewportHeight * this.camera.aspect;
-    this.viewport = {
-      width: viewportWidth,
-      height: viewportHeight,
-    };
-  }
-
-  create(template) {
-    super.create(template);
-    this.calculateViewport();
-    // Initialize your WebGL content
-    // If using DOMPlane, create a view subclass
-  }
-
-  onEnter(data) {
-    super.onEnter(data);
-    // Optional: emit ready signal for preloader
-    // emitter.emit('work:enter-ready');
-  }
-
-  transitionIn(onComplete) {
-    // Animate WebGL content in
-    onComplete?.();
-  }
-
-  transitionOut(onComplete) {
-    // Animate WebGL content out
-    // Then cleanup
-    setTimeout(() => {
-      onComplete?.();
-    }, 800); // match your animation duration
-  }
-
-  update(time) {
-    if (!this.isActive) return;
-    // Per-frame updates
-  }
-
-  onResize() {
-    this.calculateViewport();
-    // Update view dimensions
-  }
-}
-```
-
-### 4. Register Pages in main.js
-
-```js
-// src/main.js
-import { Home } from '@canvas/Home';
-import { Work } from '@canvas/Work';
-import { Project } from '@canvas/Project';
-
-const pages = {
-  home: Home,
-  work: Work,
-  project: Project,
-  // key must match data-page value in Webflow
-};
-```
-
-### 5. Set Up Webflow Data Attributes
+### 3. Set Up Webflow Data Attributes
 
 In Webflow, add these attributes to your elements:
 
