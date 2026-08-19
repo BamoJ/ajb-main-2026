@@ -51,9 +51,10 @@ export default class HeroScroll extends AnimationCore {
 		this.img.sizes = '100vw';
 
 		// Scale the full-size box down instead of animating width/height —
-		// keeps the tween GPU-only.
+		// keeps the tween GPU-only. Phones start bigger — 0.1 of a phone
+		// screen is a speck.
 		gsap.set(this.wrap, {
-			scale: 0.1,
+			scale: this.mobile ? 0.35 : 0.1,
 			transformOrigin: 'center center',
 		});
 
