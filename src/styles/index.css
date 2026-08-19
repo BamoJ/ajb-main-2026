@@ -3,8 +3,8 @@
 @import './base.css';
 @import './theme.css';
 
-/* Descender room for every SplitText masked line (mask: 'lines' clips glyphs
-   like g/j/y at tight line-heights without it). */
+/* Ascender/descender room for every SplitText masked line (mask: 'lines'
+   clips glyph tops and tails like g/j/y at tight line-heights without it). */
 .lineChildren {
-	padding-bottom: 0.1em;
+	padding-top: 0.1em;
 }

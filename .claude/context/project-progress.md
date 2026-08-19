@@ -133,6 +133,14 @@ without replaying. Known-left: font re-split can shift other animations' ST
 positions (if drift visible, one `ScrollTrigger.refresh()` after fonts.ready
 at manager level); isMobile fixed at construction (pre-existing).
 
+**Update (2026-08-19):** Bamo reported glyph tops clipped by the line masks
+during the reveal — added `padding-top: 0.1em` to `.lineChildren` in
+`styles/index.css` (mirrors the existing descender padding-bottom). Bamo also
+tuned ParaReveal by hand: `triggerStart: 'top 75%'`, `duration: 1.5` — his
+values, final. Bamo ported the class to GlobalEnter's hero-heading split but
+typed `lineClass` — the SplitText option is `linesClass` (plural); fixed, both
+call sites verified in the bundle.
+
 ---
 
 ## 2026-08-14 — Artwork list hover (/artwork): big-thumb reveal

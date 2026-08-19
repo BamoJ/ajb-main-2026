@@ -100,6 +100,7 @@ export function composeHeroEnter(view, tl) {
 		const split = new SplitText(heading, {
 			type: 'lines',
 			mask: 'lines',
+			linesClass: 'lineChildren',
 		});
 		tl.from(
 			split.lines,

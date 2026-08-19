@@ -54,7 +54,7 @@ export default class HeroScroll extends AnimationCore {
 		// keeps the tween GPU-only. Phones start bigger — 0.1 of a phone
 		// screen is a speck.
 		gsap.set(this.wrap, {
-			scale: this.mobile ? 0.35 : 0.1,
+			scale: this.mobile ? 0.22 : 0.1,
 			transformOrigin: 'center center',
 		});
 
