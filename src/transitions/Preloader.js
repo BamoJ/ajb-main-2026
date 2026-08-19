@@ -1,6 +1,7 @@
 import { gsap } from 'gsap';
 import emitter from '@utils/Emitter';
 import { clamp } from '@utils/math';
+import { prefersReducedMotion } from '@utils/media';
 
 /**
  * Preloader — tracks real loading progress and orchestrates page enter.
@@ -140,8 +141,10 @@ export default class Preloader {
 		if (this.progressBar) this.progressBar.style.width = '100%';
 
 		await new Promise((r) => setTimeout(r, 100));
-		await this.animateOut();
+		// Handoff fires at wipe START, not end — the hero enter plays
+		// underneath, so the wipe reveals a page already in motion.
 		this.onComplete();
+		await this.animateOut();
 	}
 
 	async loadAssets() {
@@ -202,22 +205,29 @@ export default class Preloader {
 	}
 
 	/**
-	 * Override this per project for custom exit animations.
+	 * Exit: the overlay's bottom edge rises — a wipe up, same inset
+	 * language as the menu and image reveals. Content stays pinned while
+	 * the mask rises. Tune duration/ease right here.
 	 */
 	animateOut() {
 		if (!this.wrapper) return Promise.resolve();
+		if (prefersReducedMotion()) {
+			this.wrapper.style.visibility = 'hidden';
+			return Promise.resolve();
+		}
+		// Same 3-value inset format on both ends so GSAP interpolates
+		// format-to-format.
+		gsap.set(this.wrapper, { clipPath: 'inset(0% 0% 0%)' });
 		return new Promise((resolve) => {
-			const tl = gsap.timeline({
+			gsap.to(this.wrapper, {
+				clipPath: 'inset(0% 0% 100%)',
+				duration: 0.9,
+				ease: 'power4.inOut',
 				onComplete: () => {
+					// clip-path removes paint, not hit-testing.
 					this.wrapper.style.visibility = 'hidden';
 					resolve();
 				},
-			});
-
-			tl.to(this.wrapper, {
-				opacity: 0,
-				duration: 0.6,
-				ease: 'power2.inOut',
 			});
 		});
 	}

@@ -92,7 +92,7 @@ export function composeHeroEnter(view, tl) {
 				duration: 1.5,
 				ease: 'power4.inOut',
 			},
-			0.3, // with the fade-in start
+			0.23, // with the fade-in start
 		);
 	}
 

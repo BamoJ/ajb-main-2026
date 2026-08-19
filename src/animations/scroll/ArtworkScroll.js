@@ -1,6 +1,13 @@
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import AnimationCore from '@animations/AnimationCore';
 
+// Both animations are killed at Webflow's Mobile Landscape breakpoint
+// and below (≤767px, per Bamo — styled accordingly in Webflow).
+// Evaluated once at setup; resizing across 767 needs a reload.
+function isMobileLandscape() {
+	return window.matchMedia('(max-width: 767px)').matches;
+}
+
 /**
  * Artwork detail page — the full scroll story, top to bottom.
  *
@@ -29,6 +36,11 @@ export class ArtworkHero extends AnimationCore {
 			triggerEnd: 'bottom bottom',
 			invalidateOnRefresh: true,
 		});
+	}
+
+	setup() {
+		if (isMobileLandscape()) return;
+		super.setup();
 	}
 
 	createElements() {
@@ -71,9 +83,9 @@ export class ArtworkGallery extends AnimationCore {
 		// Assigned post-super so the arrow can close over `this`.
 		this.options.triggerEnd = () => '+=' + this.distance();
 	}
-	ß;
+	// Skipping leaves _isSetup unset, so activate()/destroy() stay inert.
 	setup() {
-		if (window.matchMedia('(max-width: 479px)').matches) return;
+		if (isMobileLandscape()) return;
 		super.setup();
 	}
 

@@ -12,13 +12,14 @@ const DURATION_IN = 0.9;
 const DURATION_OUT = 0.3;
 
 /**
- * Artwork list hover reveal (/artwork).
+ * List hover reveal (/artwork rows, /shop products).
  *
- * Each `.w-dyn-item` link wraps both the text row and its own
- * `.artwork_thumb_big` (absolute, centered on the row, pointer-events
- * none, clip-path closed at center — all authored in Webflow). Hovering
- * the link wipes the thumb open from center; leaving wipes it closed,
- * with a scale settle on the img inside.
+ * Attribute-driven so per-section classes stay free: each big thumb
+ * carries `data-hover-thumb` and sits inside its row's `<a>` (authored
+ * in Webflow: absolute, centered on the row, pointer-events none,
+ * clip-path closed at center `inset(50% 0%)`). Hovering the link wipes
+ * the thumb open from center; leaving wipes it closed, with a scale
+ * settle on the img inside.
  *
  * `to` + `overwrite: true` (not fromTo): re-entering mid-close must
  * continue from the current clip value instead of snapping back to
@@ -27,18 +28,18 @@ const DURATION_OUT = 0.3;
 export default function artworkListHover(el) {
 	if (isMobile()) return;
 
-	const links = el.querySelectorAll('a.artwork-link');
-	if (!links.length) return;
+	const thumbEls = el.querySelectorAll('[data-hover-thumb]');
+	if (!thumbEls.length) return;
 
 	const reduced = prefersReducedMotion();
 	const controller = new AbortController();
 	const thumbs = [];
 	const imgs = [];
 
-	links.forEach((link) => {
-		const thumb = link.querySelector('.artwork_thumb_big');
-		const img = thumb?.querySelector('img');
-		if (!thumb || !img) return;
+	thumbEls.forEach((thumb) => {
+		const link = thumb.closest('a');
+		const img = thumb.querySelector('img');
+		if (!link || !img) return;
 
 		thumbs.push(thumb);
 		imgs.push(img);

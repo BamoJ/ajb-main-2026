@@ -293,3 +293,48 @@ shop-detail per earlier checklist incl. data-hero-content picks;
 (Bamo, by eye); skills docs half-trimmed (debug/transition/perf-audit/
 scroll-anim/webflow still mention WebGL); optional fonts.ready re-split
 for hero lines if hard-load line breaks look wrong.
+
+---
+
+## 2026-08-18 — Loader exit: wipe-up + overlap handoff (pre-authored)
+
+**What:** Preloader.js only. `complete()` now fires `onComplete()` (→
+`manager.initialEnter()`) BEFORE `animateOut()` — hero enter plays underneath
+so the wipe reveals a page already in motion (double-call safe:
+AnimationCore.activate() guards `_isActive`). `animateOut()` replaced the
+0.6s opacity fade with a wipe up: `clipPath` `inset(0% 0% 0%)` →
+`inset(0% 0% 100%)`, 0.9s `power4.inOut` (site's wipe ease), reduced-motion
+snaps visibility hidden, format-matched 3-value insets. All literals inline.
+
+**State:** builds 193.37KB, prettier clean, UNCOMMITTED. Webflow overlay DOM
+does NOT exist yet — headless branch keeps booting plain, so this is safe to
+ship anytime. Bamo's Designer checklist for the overlay: symbol on every
+page outside `.page_wrapper` — `data-loader="wrapper"` (fixed, inset 0,
+z-top, solid bg, authored VISIBLE), text "0" `data-loader="loader-num"`,
+bar FILL div `data-loader="progress-bar"` (JS drives fill width 0→100%,
+author fill at width 0 inside a track), optional static logo.
+
+---
+
+## 2026-08-19 — artwork-list-hover attribute-driven (reuse on /shop)
+
+**What:** `components/artwork-list-hover/artwork-list-hover.js` (verified
+working on /artwork) refactored from class queries to ONE data-attribute so
+the shop list can reuse it with its own thumb class: query
+`[data-hover-thumb]` per thumb, derive the row link via `thumb.closest('a')`
+(thumb sits inside its `<a>` on both pages — verified by curl of live /shop),
+img via `thumb.querySelector('img')`. Tweens untouched (0.9 in / Bamo's 0.3
+out, `to` + `overwrite: true`, reduced-motion set, AbortController cleanup).
+No `.artwork_thumb_big` fallback kept — one-time migration by publish
+sequencing, not permanent cruft. JS↔Webflow contract: thumb authored
+absolute + pointer-events none + `clip-path: inset(50% 0%)` (JS animates
+exactly that ↔ `inset(0% 0%)`); size/aspect free per section class.
+
+**State:** builds (193.34KB), prettier clean, bundle grep: `hover-thumb` in,
+`artwork_thumb_big`/`artwork-link` 0 hits. NOT browser-verified. Designer
+work (Bamo): (a) /artwork — add `data-hover-thumb` on `.artwork_thumb_big`;
+(b) /shop — `data-component="artwork-list-hover"` on the list section +
+author big thumb (own class) with `data-hover-thumb` and the three authored
+properties, `<img>` inside; (c) /shop view has leftover `data-page="contact"`
+→ should be `"shop"`. SEQUENCING: publish Webflow attrs BEFORE/with deploying
+this bundle — refactored JS finds nothing on the old /artwork markup.
