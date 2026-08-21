@@ -12,14 +12,17 @@ const DURATION_IN = 0.9;
 const DURATION_OUT = 0.3;
 
 /**
- * List hover reveal (/artwork rows, /shop products).
+ * List hover reveal, viewport-centered (/artwork rows, /shop products).
  *
- * Attribute-driven so per-section classes stay free: each big thumb
- * carries `data-hover-thumb` and sits inside its row's `<a>` (authored
- * in Webflow: absolute, centered on the row, pointer-events none,
- * clip-path closed at center `inset(50% 0%)`). Hovering the link wipes
- * the thumb open from center; leaving wipes it closed, with a scale
- * settle on the img inside.
+ * Two collection lists off the same collection, same sort: the visible
+ * rows (`data-hover-link` on each `<a>`) and a fixed, centered stack of
+ * big thumbs (`data-hover-thumb` on each clip target, authored closed
+ * at `inset(50% 0%)`, pointer-events none up its wrapper chain).
+ * Pairing is by INDEX — Webflow renders both lists in identical order.
+ * Hovering row i wipes thumb i open from center; leaving wipes it
+ * closed, with a scale settle on the img inside. On open the thumb's
+ * collection item is z-raised so the incoming wipe always plays over
+ * the outgoing close.
  *
  * `to` + `overwrite: true` (not fromTo): re-entering mid-close must
  * continue from the current clip value instead of snapping back to
@@ -28,24 +31,33 @@ const DURATION_OUT = 0.3;
 export default function artworkListHover(el) {
 	if (isMobile()) return;
 
-	const thumbEls = el.querySelectorAll('[data-hover-thumb]');
-	if (!thumbEls.length) return;
+	const links = el.querySelectorAll('[data-hover-link]');
+	const thumbs = el.querySelectorAll('[data-hover-thumb]');
+	if (!links.length || !thumbs.length) return;
+	if (links.length !== thumbs.length) {
+		console.warn(
+			`[artwork-list-hover] ${links.length} links vs ${thumbs.length} thumbs — lists out of sync`,
+		);
+		return;
+	}
 
 	const reduced = prefersReducedMotion();
 	const controller = new AbortController();
-	const thumbs = [];
 	const imgs = [];
+	let zTop = 0;
 
-	thumbEls.forEach((thumb) => {
-		const link = thumb.closest('a');
+	links.forEach((link, i) => {
+		const thumb = thumbs[i];
 		const img = thumb.querySelector('img');
-		if (!link || !img) return;
+		if (!img) return;
 
-		thumbs.push(thumb);
 		imgs.push(img);
 		gsap.set(img, { scale: SCALE_FROM });
 
 		const open = () => {
+			gsap.set(thumb.closest('.w-dyn-item') || thumb, {
+				zIndex: ++zTop,
+			});
 			if (reduced) {
 				gsap.set(thumb, { clipPath: OPEN });
 				gsap.set(img, { scale: 1 });

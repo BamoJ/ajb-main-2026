@@ -82,7 +82,7 @@ export default class GlobalTransition extends Transition {
 export function composeHeroEnter(view, tl) {
 	const media = view.querySelector('[data-hero-image]');
 	const heading = view.querySelectorAll('[data-hero-heading]');
-	const content = view.querySelector('[data-hero-content]');
+	const content = view.querySelectorAll('[data-hero-content]');
 
 	if (media) {
 		tl.from(

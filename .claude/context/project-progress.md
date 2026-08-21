@@ -346,3 +346,88 @@ author big thumb (own class) with `data-hover-thumb` and the three authored
 properties, `<img>` inside; (c) /shop view has leftover `data-page="contact"`
 → should be `"shop"`. SEQUENCING: publish Webflow attrs BEFORE/with deploying
 this bundle — refactored JS finds nothing on the old /artwork markup.
+
+---
+
+## 2026-08-21 — Line-height trim made opt-in: data-lh-trim
+
+**What:** `styles/lineheight.css` rewritten. It carried the Lumos trim
+formula applied GLOBALLY to `[class*='u-text-style-']` + every bare
+h1–h6/p/blockquote — but this project has no u-text-style system, and the
+client's lineheight complaint needs per-element control. Now ONE opt-in
+selector: `[data-lh-trim]` (Bamo's design). Formula untouched:
+`display: flow-root` on the element (contains the pseudo margins + makes
+height include them), `::before`/`::after` as `display: table` with
+`margin-bottom: calc(-0.5lh + 0.34em)` (top) / `+ 0.38em` (bottom) — the
+two em constants are the font-metric tune, adjust by eye. SplitText-safe:
+pseudo-elements aren't DOM, so split/revert never touches them, and the
+negative margins pull the line-mask divs exactly like raw line boxes —
+`data-lh-trim` can sit on the same element as `data-anim="paragraph"` etc.
+`lh` unit = Chrome 109+/Safari 16.4+/Firefox 120+ (verified via caniuse);
+older browsers drop the calc → untrimmed text, same as before.
+
+**State:** builds (193.61KB), prettier clean, `data-lh-trim` in bundle CSS.
+BEHAVIOR CHANGE: headings/paragraphs that were being globally trimmed lose
+the trim until tagged. Designer work (Bamo): add `data-lh-trim` in Webflow
+on each text element to trim — the TEXT element itself, never a flex/grid
+wrapper (flow-root overrides authored display; table pseudos would become
+flex items and break the math). NOT browser-verified yet.
+
+---
+
+## 2026-08-21 — Split-line spacing fix + line-height is the knob again
+
+**What:** Bamo reported nasty line spaces on split headings (artwork-detail
+`display-large` "Savannah Smile", League Gothic). Two stacked causes, both
+verified (SplitText source read, layout measured in headless Chrome):
+(1) the BIG gap = authored line-height × League Gothic's tall em box (caps
+fill ~70% of the line box) — a Webflow line-height issue, previously unsafe
+to tighten because masks clip glyphs at tight lh; (2) +0.1em per line ONLY
+while split = the uncompensated `.lineChildren { padding-top: 0.1em }`
+(measured: 2-line heading @100px font — 150px unsplit vs 170px split).
+Fix in `styles/index.css`: `.lineChildren-mask { margin-bottom: -0.1em;
+transform: translateY(-0.1em) }` — bottom margin DELIBERATELY (a top margin
+collapses into data-lh-trim's ::before negative margin and half-fails,
+measured 160px not 150px; adjacent negative margins collapse to the most
+negative, they don't add — do NOT "simplify" to margin-top). Result: split
+layout == unsplit layout exactly, clip room kept, no JS changes (GSAP tweens
+lines, never masks). Also this session: `lineheight.css` made opt-in
+`[data-lh-trim]` (see entry above); Bamo re-tuned constants to 0.2em/0.2em.
+
+**State:** builds 193.49KB, `lineChildren-mask` in bundle CSS. Designer work
+(Bamo): tighten `line-height` on `.display-large` (start ~0.85; combo class
+if shared) — after this fix the authored value is exactly what split text
+renders. If glyph tops clip at the final value: raise the 0.1em pad and both
+-0.1em give-backs together (one number, three places). data-lh-trim's two
+0.2em constants remain the outer top/bottom trim knobs (::after = bottom).
+Browser-verify on /artwork-collections/savannah-smile with dev server.
+
+---
+
+## 2026-08-21 — artwork-list-hover: centered big thumb (index-paired lists)
+
+**What:** Client revision — big thumb now fixed-centered in the viewport, not
+per-row. Bamo authored a SECOND collection list (same collection, same sort)
+inside `.section-artwork-list`, published 06:24 UTC and verified by curl:
+`.artwork_show_parent` (fixed inset 0, pointer-events none) > `.aw_show_wrap`
+> `.aw_show_list` (flex centered) > `.aw_show_item` (absolute 23vw, all
+stacked center) > `.aw_show_visual` (`clip-path: inset(50% 0%)` — the JS clip
+target) > `img.aw_show_img`. Old inside-link thumbs deleted by Bamo.
+`artwork-list-hover.js` reworked: `thumb.closest('a')` replaced by TWO
+queries — `[data-hover-link]` (row `<a>`s) + `[data-hover-thumb]`
+(`.aw_show_visual`s) — paired BY INDEX (both lists render the same collection
+in the same order; filenames verified row-for-row). Bail + console.warn on
+length mismatch. New `zTop` counter: on open, z-raise
+`thumb.closest('.w-dyn-item') || thumb` so the incoming wipe always plays
+over the outgoing close (all thumbs occupy the same centered spot now).
+Tweens/reduced-motion/cleanup unchanged (0.9 in / 0.3 out, `to` +
+`overwrite: true`).
+
+**State:** builds (193.61KB), prettier clean, both attributes in bundle. NOT
+browser-verified. Designer work left (Bamo): `data-hover-link` on the
+`a.artwork-link` template + `data-hover-thumb` on the `.aw_show_visual`
+template (styling already done); same two attrs on /shop when rebuilt this
+way. Resolved by design: `.artwork-link:hover{opacity:.8}` no longer dims the
+thumb (outside the link). Verify after publish on `/artwork?dev=true`: correct
+artwork per row (INDEX alignment), row-to-row spam (incoming on top), re-enter
+mid-close smooth.

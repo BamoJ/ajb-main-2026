@@ -2,9 +2,19 @@
 @import './lenis.css';
 @import './base.css';
 @import './theme.css';
+/* @import './lineheight.css'; */
 
 /* Ascender/descender room for every SplitText masked line (mask: 'lines'
    clips glyph tops and tails like g/j/y at tight line-heights without it). */
 .lineChildren {
 	padding-top: 0.1em;
+}
+
+/* That padding adds 0.1em of REAL height per split line — extra line spacing.
+   Give it back on the mask (bottom margin — a top margin would collapse into
+   data-lh-trim's ::before margin and half-fail) and lift the ink back up with
+   a layout-free transform. Net: split layout = unsplit layout, clip room kept. */
+.lineChildren-mask {
+	margin-bottom: -0.25em;
+	transform: translateY(-0.1em);
 }

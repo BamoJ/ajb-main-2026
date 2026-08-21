@@ -1,0 +1,15 @@
+/* Opt-in line-height trim (Lumos formula). Tag the text element itself
+   with data-lh-trim — not a layout wrapper (flow-root overrides display). */
+[data-lh-trim] {
+	display: flow-root;
+}
+[data-lh-trim]::before {
+	content: '';
+	display: table;
+	margin-bottom: calc(-0.5lh + 0.3em);
+}
+[data-lh-trim]::after {
+	content: '';
+	display: table;
+	margin-bottom: calc(-0.5lh + 0.37em);
+}
